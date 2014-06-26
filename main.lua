@@ -22,48 +22,28 @@
 --
  
 local widget = require "widget"
-local tablespinner = require "tablespinner"
 
 local SCREEN_WIDTH = display.contentWidth
 local SCREEN_HEIGHT = display.contentHeight
-local ROW_HEIGHT = 150
-local REFRESH_ROW_HEIGHT = 50
+local ROW_HEIGHT = 50
 
-local springStart = 0
-local needToReload = false
-local pullDown = nil
-local reloadspinner
-local  reloadInProgress = false
-
-local tablespinnerImageSheet = graphics.newImageSheet( "tablespinner.png", tablespinner:getSheet() )	
+local itemList = {}
 
 
---########################################
---  reloadTable() - 
---  a dummy timer-driven fn to simulate a reload
---########################################	
-function reloadTable()
+local function initData(count)
 	
-	
-   function reloadcomplete()   -- this needs to be executed at the end of the reload fn
-       
-       if (reloadspinner ~= nil) and (reloadspinner.x ~= nil) then 
-	       reloadspinner:stop()
-    	   reloadspinner.alpha = 0
-       end	 	   
-	   transition.to( pullDown, { time=50, rotation=0, 
-	   												onComplete= function() 
-	   													if (pullDown ~= nil) and (pullDown.x ~= nil) then
-	   														pullDown.alpha = 1; 
-	   													end
-	   													reloadInProgress = false; 
-	   end } )        	 
+	for i = 1, count do
+		itemList[i] = {}
+		itemList[i].title = "Row "..i
 	end
-
-
-	-- Do your reload logic here. Then call the reloadComplete() directly instead of timer below
-	reloadCompleteTimer = timer.performWithDelay( 2000, reloadcomplete, 1 )      	 
 	
+	for i = 1, count do
+		list:insertRow{
+				rowHeight =ROW_HEIGHT,
+				rowColor = {  default = { 1, 1, 1 }, over = { 0.95, 0.95, 0.95, 1 }},
+				}		
+	end
+		
 end
 
 
@@ -73,41 +53,7 @@ local function onRowRender( event )
 	local row = event.row
 	local index = row.index 
 
-	if index== 1 then 
-		if (pullDown == nil) or (pullDown.x == nil) then
-			pullDown = display.newImage( row, "downloadarrow.png")
-			pullDown.anchorX = 0.5
-			pullDown.anchorY = 0.5
-			pullDown.x = SCREEN_WIDTH * 0.5
-			pullDown.y = REFRESH_ROW_HEIGHT * 0.5
-		else
-			pullDown.alpha = 1
-		end
-
-		if (reloadspinner == nil)  or (reloadspinner.x == nil) then
-			reloadspinner = widget.newSpinner
-			{
-			    width = 128,
-			    height = 128,
-			    sheet = tablespinnerImageSheet,
-			    startFrame = 1,
-			    count = 8,
-			    time = 800
-			}
-	
-			reloadspinner.alpha = 0	
-			reloadspinner.anchorX = 0.5
-			reloadspinner.anchorY = 0.5
-			reloadspinner.x = SCREEN_WIDTH*0.5
-			reloadspinner.y = REFRESH_ROW_HEIGHT * 0.5
-			
-		end
-		
-		row:insert(reloadspinner)
-		return
-	end
-
-	local rowText = display.newText(row, "ROW NUMBER "..(index-1), 0, 0,  "Times New Roman", 12)
+	local rowText = display.newText(row, itemList[index].title, 0, 0,  "Times New Roman", 12)
 
 	rowText.anchorX = 0.5
 	rowText.anchorY = 0.5
@@ -123,49 +69,78 @@ local function onRowTouch( event )
 end
 
 
-
 local function scrollListener( event )
 	
-	if (reloadInProgress == true) then
-		return true
-	end
-	
-	if ( event.phase == "began" ) then
-
-		needToReload = false
-  
-   elseif ( event.phase == "moved" ) and ( event.target.parent.parent:getContentPosition() > REFRESH_ROW_HEIGHT) then
-        
-		needToReload = true
-        transition.to( pullDown, { time=200, rotation=180 } )
-
-   elseif ( event.limitReached == true and event.phase == nil and  event.direction == "down" and needToReload == true ) then
-
-		reloadInProgress = true  --turn this off at the end of the reload function
-		needToReload = false
-		pullDown.alpha = 0
-		reloadspinner.alpha = 1
-        reloadspinner:start()              
-        reloadTable() 
- 
-   end    
    return true
 end
 
 
 local function insertTable()
-	list:insertRow{  -- this is the row containing the pulldown arrow/spinner
-				rowHeight =REFRESH_ROW_HEIGHT,
-				rowColor = {  default = { 1, 1, 1 }, over = { 0.95, 0.95, 0.95, 1 }},
-				}		
-	-- now comes the real content			
-	for i = 1, 10 do
+	for i = 1, 100 do
 		list:insertRow{
 				rowHeight =ROW_HEIGHT,
 				rowColor = {  default = { 1, 1, 1 }, over = { 0.95, 0.95, 0.95, 1 }},
 				}		
 	end
 end
+
+
+function reloadTable(index, count, slideDirection)
+
+	if (list:getNumRows() < index) then
+		print("Cannot insert at "..index..". Table too small.")
+		return
+	end	
+
+	local rowOptionList = {}
+	
+	for i = count, 1, -1 do
+	-- Fetch the new rows!!!	
+		local newRow = {}
+		newRow.title = "Title - insert ("..os.clock()..")"	
+		table.insert(itemList, index, newRow)
+
+		rowOptionList[i]	=		{
+				rowHeight =ROW_HEIGHT,
+				rowColor = {  default = { 1, 1, 1 }, over = { 0.95, 0.95, 0.95, 1 }}
+				}
+		
+	end
+
+		local function insertComplete()
+			print("INSERT COMPLETE...Safe to do another insert/delete...")
+			--		list:reloadData()
+		end
+	
+	list:insertRowsAtIndex( index, rowOptionList, {insertDirection = slideDirection, onComplete = insertComplete})
+		
+end
+
+
+function deleteFromTable(startRowIndex, endRowIndex)
+	
+	if (list:getNumRows() < endRowIndex) then
+		print("not enough rows...")
+		return
+	end
+	
+	local function deleteComplete()
+		print("DELETE COMPLETE...Safe to do another insert/delete...")
+		
+		-- VERY IMPORTANT: The data model for the tableview should be updated only in this callback.
+		-- Otherwise, if it is done before calling deleteRowsAtIndex(), then the deletion animation
+		-- will use the updated data model for its transition animation  causing issues.
+		
+		for i = startRowIndex, endRowIndex do
+			table.remove(itemList, startRowIndex)
+		end	
+		--	list:reloadData()
+	end
+	
+	list:deleteRowsAtIndex( startRowIndex, endRowIndex, {transitionTime =350, onComplete = deleteComplete} )
+	
+end
+
 
 local function createWidgets()		
 	toolbar = display.newImage( "toolbar.png")	
@@ -175,8 +150,8 @@ local function createWidgets()
 	toolbar.x, toolbar.y = 0, 0
 
 	list = widget.newTableView{
-		top = toolbar.contentHeight - REFRESH_ROW_HEIGHT,
-		height = SCREEN_HEIGHT - (toolbar.contentHeight - REFRESH_ROW_HEIGHT),
+		top = toolbar.contentHeight,
+		height = SCREEN_HEIGHT - toolbar.contentHeight,
 		maxVelocity = 1, 
 		noLines = false,
 		onRowRender = onRowRender,
@@ -184,13 +159,113 @@ local function createWidgets()
 		listener = scrollListener
 	}
 		
-	toolbar:toFront()	
+	insertLeftButton = widget.newButton
+	{
+	    id = "insertLeft",
+	    left = 2,
+	    top = 2,
+	    label = "Insert Left",
+		labelAlign = "center",
+		fontSize = 12,
+	    width = 70, height = toolbar.contentHeight - 4,
+	    cornerRadius = 4,
+		onRelease = function() 
+								reloadTable(3, 2, "left")
+							end;
+	}
+
+	insertLeftButton.anchorX = 0
+	insertLeftButton.anchorY = 0.5
+	insertLeftButton.x = 5
+	insertLeftButton.y = toolbar.contentHeight *0.5
+
+	insertRightButton = widget.newButton
+	{
+	    id = "insertRight",
+	    left = 2,
+	    top = 2,
+	    label = "Insert Right",
+		labelAlign = "center",
+		fontSize = 12,
+	    width = 70, height = toolbar.contentHeight - 4,
+	    cornerRadius = 4,
+		onRelease = function() 
+								reloadTable(3, 2, "right")
+							end;
+	}
+
+	insertRightButton.anchorX = 0
+	insertRightButton.anchorY = 0.5
+	insertRightButton.x = 80
+	insertRightButton.y = toolbar.contentHeight *0.5
+
+
+	insertDownButton = widget.newButton
+	{
+	    id = "insertDown",
+	    left = 2,
+	    top = 2,
+	    label = "Insert Down",
+		labelAlign = "center",
+		fontSize = 12,
+	    width = 70, height = toolbar.contentHeight - 4,
+	    cornerRadius = 4,
+		onRelease = function() 
+								reloadTable(3, 2, "down")
+							end;
+	}
+
+	insertDownButton.anchorX = 0
+	insertDownButton.anchorY = 0.5
+	insertDownButton.x = 150
+	insertDownButton.y = toolbar.contentHeight *0.5
+
+
+
+	deleteButton = widget.newButton
+	{
+	    id = "Delete",
+	    left = 2,
+	    top = 2,
+	    label = "Delete",
+		labelAlign = "center",
+		fontSize = 12,
+	    width = 70, height = toolbar.contentHeight - 4,
+	    cornerRadius = 4,
+		onRelease = function() 
+								deleteFromTable(4,15)
+							end;
+	}
+
+	deleteButton.anchorX = 0
+	deleteButton.anchorY = 0.5
+	deleteButton.x = 220
+	deleteButton.y = toolbar.contentHeight *0.5
+
 end
 
 
 
+local function onRequireWidgetLibrary(name)
+	return require("widgetLibrary." .. name)
+end
+package.preload.widget = onRequireWidgetLibrary
+package.preload.widget_button = onRequireWidgetLibrary
+package.preload.widget_momentumScrolling = onRequireWidgetLibrary
+package.preload.widget_pickerWheel = onRequireWidgetLibrary
+package.preload.widget_progressView = onRequireWidgetLibrary
+package.preload.widget_scrollview = onRequireWidgetLibrary
+package.preload.widget_searchField = onRequireWidgetLibrary
+package.preload.widget_segmentedControl = onRequireWidgetLibrary
+package.preload.widget_spinner = onRequireWidgetLibrary
+package.preload.widget_stepper = onRequireWidgetLibrary
+package.preload.widget_slider = onRequireWidgetLibrary
+package.preload.widget_switch = onRequireWidgetLibrary
+package.preload.widget_tabbar = onRequireWidgetLibrary
+package.preload.widget_tableview = onRequireWidgetLibrary
+
 
 display.setStatusBar( display.HiddenStatusBar )	
 createWidgets()
-insertTable()
+initData(100)
 
